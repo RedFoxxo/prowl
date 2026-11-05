@@ -1,25 +1,19 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process'
-import { once } from 'node:events'
-import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { installChromium } from './browser/install.js'
 import { Browser } from './browser/session.js'
 import { Sites } from './browser/sites.js'
 import { loadConfig } from './config.js'
 import { createServer } from './server.js'
 
-/** `prowl install`: downloads the Chromium build this Playwright version drives. */
-async function install(): Promise<void> {
-  const cli = join(dirname(createRequire(import.meta.url).resolve('playwright-core/package.json')), 'cli.js')
-  const child = spawn(process.execPath, [cli, 'install', 'chromium'], { stdio: 'inherit' })
-  const [code] = (await once(child, 'exit')) as [number | null]
-  process.exit(code ?? 1)
-}
-
 async function serve(): Promise<void> {
   const config = loadConfig()
-  const browser = new Browser(new Sites(config.allow), { profileDir: config.profileDir, headed: config.headed })
+  const browser = new Browser(new Sites(config.allow), {
+    profileDir: config.profileDir,
+    downloadsDir: config.downloadsDir,
+    headed: config.headed,
+    install: () => installChromium('stderr'),
+  })
   const server = createServer({ browser })
   let closing = false
   const shutdown = async () => {
@@ -39,7 +33,7 @@ async function serve(): Promise<void> {
 
 async function main(): Promise<void> {
   const [command] = process.argv.slice(2)
-  if (command === 'install') return install()
+  if (command === 'install') return installChromium('inherit')
   if (command === undefined) return serve()
   process.stderr.write(`prowl: unknown command "${command}". Usage: prowl (MCP server on stdio) | prowl install\n`)
   process.exit(1)

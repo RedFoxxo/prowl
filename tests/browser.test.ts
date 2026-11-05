@@ -165,6 +165,24 @@ describe('consent for other sites', () => {
     expect(site.requests.filter((r) => r.startsWith('site.test '))).toEqual([])
   })
 
+  it('answers at once when a goto is redirected to a site that is not allowed', async () => {
+    browser = testBrowser()
+    await call(grantSite, { site: 'site.test' }, ctx())
+    const started = Date.now()
+    const { text } = await act({ do: 'goto', url: site.other('site.test', '/away') })
+    expect(text).toContain('blocked http://other.test')
+    expect(Date.now() - started).toBeLessThan(5000)
+  })
+
+  it('answers at once when a new tab is redirected to a site that is not allowed', async () => {
+    browser = testBrowser()
+    await call(grantSite, { site: 'site.test' }, ctx())
+    const page = (await act({ do: 'goto', url: site.local('/app') })).text
+    const started = Date.now()
+    await act({ do: 'click', ref: refOf(page, 'button "Popup redirect"') })
+    expect(Date.now() - started).toBeLessThan(5000)
+  })
+
   it('follows a redirect to a site once it is granted', async () => {
     browser = testBrowser()
     await call(grantSite, { site: 'site.test' }, ctx())
@@ -174,8 +192,78 @@ describe('consent for other sites', () => {
   })
 
   it('allows sites from PROWL_ALLOW without a grant', async () => {
-    browser = testBrowser(['site.test'])
+    browser = testBrowser({ allow: ['site.test'] })
     expect((await act({ do: 'goto', url: site.other('site.test', '/page') })).text).toContain('# External page on site.test')
+  })
+
+  it('opens a new tab on an allowed site, holding its first load until the tab is guarded', async () => {
+    browser = testBrowser()
+    const page = (await act({ do: 'goto', url: site.local('/app') })).text
+    const { text } = await act({ do: 'click', ref: refOf(page, 'button "Open tab"') })
+    expect(text).toContain('new tab 1 opened')
+    expect(text).toMatch(/\[e\d+ button "Old"\]/)
+    expect(browser.pages).toHaveLength(2)
+    const started = Date.now()
+    const closed = (await act({ do: 'close_tab' })).text
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(closed).toContain('# Orders')
+    expect(browser.pages).toHaveLength(1)
+  })
+
+  it('stops a new tab on a granted site from redirecting to one that is not', async () => {
+    browser = testBrowser()
+    site.requests.length = 0
+    await call(grantSite, { site: 'site.test' }, ctx())
+    const page = (await act({ do: 'goto', url: site.local('/app') })).text
+    const { text } = await act({ do: 'click', ref: refOf(page, 'button "Popup redirect"') })
+    expect(text).toContain('blocked http://other.test')
+    expect(site.requests).toContain('site.test /away')
+    expect(site.requests.filter((r) => r.startsWith('other.test '))).toEqual([])
+  })
+
+  it('blocks an iframe from a site that is not allowed, and loads it once granted', async () => {
+    browser = testBrowser()
+    site.requests.length = 0
+    const blocked = (await act({ do: 'goto', url: site.local('/embed') })).text
+    expect(blocked).toContain('blocked iframe http://site.test')
+    expect(site.requests.filter((r) => r.startsWith('site.test '))).toEqual([])
+    await call(grantSite, { site: 'site.test' }, ctx())
+    await act({ do: 'reload' })
+    expect(site.requests).toContain('site.test /page')
+  })
+})
+
+describe('downloads and the window', () => {
+  it('saves a download under the downloads folder and says where', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'prowl-downloads-'))
+    try {
+      browser = testBrowser({ downloadsDir: dir })
+      const page = (await act({ do: 'goto', url: site.local('/app') })).text
+      const first = (await act({ do: 'click', ref: refOf(page, 'link "Download"') })).text
+      expect(first).toContain(`downloaded report.txt from ${site.local('/file')} to ${join(dir, 'report.txt')} (5 bytes)`)
+      expect(await readFile(join(dir, 'report.txt'), 'utf8')).toBe('hello')
+      // A second download of the same name does not overwrite the first.
+      const second = (await act({ do: 'click', ref: refOf(page, 'link "Download"') })).text
+      expect(second).toContain(join(dir, 'report (1).txt'))
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('stays hidden with the same page when there is no screen to show the window on', async () => {
+    const saved = { DISPLAY: process.env.DISPLAY, WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY }
+    delete process.env.DISPLAY
+    delete process.env.WAYLAND_DISPLAY
+    try {
+      browser = testBrowser()
+      await act({ do: 'goto', url: site.local('/app') })
+      const { text } = await act({ do: 'show' })
+      expect(text).toContain('✗ show: There is no screen to show the browser on')
+      expect(browser.headed).toBe(false)
+      expect((await call(readPage, {}, ctx())).text).toContain('# Orders')
+    } finally {
+      Object.assign(process.env, Object.fromEntries(Object.entries(saved).filter(([, v]) => v !== undefined)))
+    }
   })
 })
 
@@ -213,14 +301,14 @@ describe('logs, pictures and scripts', () => {
     try {
       // The test runner's parent process stands in for another prowl session.
       await writeFile(join(dir, 'prowl.lock'), String(process.ppid))
-      browser = testBrowser([], dir)
+      browser = testBrowser({ profileDir: dir })
       const held = (await act({ do: 'goto', url: site.local('/app') })).text
       expect(held).toContain('Another prowl session is using the browser profile')
       await browser.close()
 
       // A lock left by a process that is gone is taken over, and released on close.
       await writeFile(join(dir, 'prowl.lock'), '999999999')
-      browser = testBrowser([], dir)
+      browser = testBrowser({ profileDir: dir })
       const taken = (await act({ do: 'goto', url: site.local('/app') })).text
       expect(taken).not.toContain('Another prowl session')
       expect(await readFile(join(dir, 'prowl.lock'), 'utf8')).toBe(String(process.pid))

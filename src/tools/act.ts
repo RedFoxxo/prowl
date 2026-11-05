@@ -10,7 +10,7 @@ import { header, snapshot, text } from './respond.js'
 import { defineTool, type ToolContext } from './types.js'
 
 const ACTIONS = [
-  'goto', 'click', 'fill', 'type', 'press', 'select', 'check', 'uncheck', 'hover', 'upload', 'scroll', 'wait', 'back', 'forward', 'reload', 'tab', 'close_tab', 'dialog',
+  'goto', 'click', 'fill', 'type', 'press', 'select', 'check', 'uncheck', 'hover', 'upload', 'scroll', 'wait', 'back', 'forward', 'reload', 'tab', 'close_tab', 'dialog', 'show', 'hide',
 ] as const
 
 const step = z.object({
@@ -124,11 +124,15 @@ async function run(ctx: ToolContext, page: Page, s: Step): Promise<string | void
       ctx.browser.switchTo(need(s.index, 'index'))
       return
     case 'close_tab':
-      await page.close()
+      await ctx.browser.closeTab(page)
       return
     case 'dialog':
       ctx.browser.answerNextDialog(s.accept ?? true, s.value)
       return
+    case 'show':
+    case 'hide':
+      await ctx.browser.setHeaded(s.do === 'show')
+      return s.do === 'show' ? 'the browser window is open; the user can sign in or look there, then tell you when done' : undefined
   }
 }
 
@@ -140,7 +144,7 @@ function label(s: Step): string {
 export const actPage = defineTool({
   name: 'act_page',
   description:
-    'Run steps in the browser, in order, stopping at the first that fails: goto url, click/fill/type/press/select/check/uncheck/hover/upload/scroll ref, wait for text or ms, back, forward, reload, tab index, close_tab, dialog (how to answer the next confirm or prompt; they are dismissed otherwise). Local sites (localhost, 127.0.0.1) open freely; any other site only after grant_site. Answers with what changed on the page (or the new page after a navigation), new console errors and failed requests.',
+    'Run steps in the browser, in order, stopping at the first that fails: goto url, click/fill/type/press/select/check/uncheck/hover/upload/scroll ref, wait for text or ms, back, forward, reload, tab index, close_tab, dialog (how to answer the next confirm or prompt; they are dismissed otherwise), show/hide the browser window (show it so the user signs in to a service themselves instead of giving you their password). Local sites (localhost, 127.0.0.1) open freely; any other site only after grant_site. Answers with what changed on the page (or the new page after a navigation), new console errors, failed requests and downloads.',
   input: { steps: z.array(step).min(1).max(30) },
   async handler({ steps }, ctx) {
     const { browser } = ctx

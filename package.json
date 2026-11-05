@@ -1,6 +1,6 @@
 {
   "name": "@redfoxxo/prowl",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Token-lean browser MCP server: test local apps freely, browse other sites only after the user allows them",
   "keywords": [
     "mcp",

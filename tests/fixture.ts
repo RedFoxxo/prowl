@@ -40,12 +40,18 @@ function pages(port: number): Record<string, string> {
 <a href="${external}">External</a>
 <a href="/redir">Redirect away</a>
 <button id="pop">Popup</button>
+<button id="tab">Open tab</button>
+<button id="popaway">Popup redirect</button>
+<a href="/file">Download</a>
 <div id="out"></div>
 <script>
 save.onclick = async () => { out.textContent = 'Saved!'; console.error('boom'); await fetch('/api/fail', { method: 'POST', body: '{"qty":3}' }) }
 del.onclick = () => { out.textContent = confirm('Delete everything?') ? 'Deleted' : 'Kept' }
 pop.onclick = () => window.open('${external}')
+tab.onclick = () => window.open('/rerender')
+popaway.onclick = () => window.open('http://site.test:${port}/away')
 </script>`,
+    '/embed': `<!doctype html><title>Embed</title><h1>Embed</h1><iframe title="Other" src="${external}"></iframe>`,
     '/rerender': `<!doctype html><title>Rerender</title><div id="box"><button id="b">Old</button></div>
 <script>b.onclick = () => { box.innerHTML = '<button>New</button>' }</script>`,
   }
@@ -62,9 +68,15 @@ export async function startSite(): Promise<TestSite> {
       res.end('{"error":"nope"}')
       return
     }
-    if (path === '/redir') {
-      res.writeHead(302, { location: `http://site.test:${port}/page` })
+    if (path === '/redir' || path === '/away') {
+      // /redir goes to site.test, /away (on site.test) goes on to other.test.
+      res.writeHead(302, { location: `http://${path === '/redir' ? 'site' : 'other'}.test:${port}/page` })
       res.end()
+      return
+    }
+    if (path === '/file') {
+      res.writeHead(200, { 'content-type': 'text/plain', 'content-disposition': 'attachment; filename="report.txt"' })
+      res.end('hello')
       return
     }
     if (path === '/page') {
@@ -93,9 +105,10 @@ export async function startSite(): Promise<TestSite> {
 }
 
 /** A headless browser, in memory unless given a profile folder, every host mapped to 127.0.0.1. */
-export function testBrowser(allow: string[] = [], profileDir?: string): Browser {
-  return new Browser(new Sites(allow), {
-    profileDir,
+export function testBrowser(options: { allow?: string[]; profileDir?: string; downloadsDir?: string } = {}): Browser {
+  return new Browser(new Sites(options.allow ?? []), {
+    profileDir: options.profileDir,
+    downloadsDir: options.downloadsDir,
     headed: false,
     args: ['--host-resolver-rules=MAP * 127.0.0.1', '--disable-features=HttpsUpgrades,HttpsFirstBalancedModeAutoEnable'],
   })

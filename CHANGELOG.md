@@ -1,17 +1,24 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 1.0.0 (unreleased)
 
 - Tools: `read_page`, `read_logs`, `read_screenshot`, `act_page`,
   `grant_site`, `exec_script`.
 - Local sites open freely; any other site only after `grant_site`, for the
-  session. Every top-level page load is checked in the browser, so links,
-  redirects and popups can't get around it; a blocked popup tab is closed.
+  session. Pages and iframes are checked in the browser before any request is
+  sent: links, redirects, popups and new tabs can't get around it. A new
+  tab's first load is held until its redirect check is on. A tab that only
+  shows a blocked page is closed.
 - Pages as compact text with refs that stay stable while an element lives;
   passwords never shown.
-- `act_page` answers with the page's changes, new console errors and failed
-  requests; after a navigation, the new page.
+- `act_page` answers with the page's changes, new console errors, failed
+  requests and downloads; after a navigation, the new page. A disabled
+  control fails at once instead of after a timeout.
+- `act_page` `show` and `hide` open and close the browser window, keeping
+  tabs and logins, so the user can sign in themselves.
+- Downloads are saved to `PROWL_DOWNLOADS_DIR` and reported.
 - `read_logs` shows one request with its payload and response body.
 - Confirm and prompt dialogs are dismissed unless a step accepts them.
-- `PROWL_ALLOW`, `PROWL_HEADED`, `PROWL_PROFILE_DIR`; `prowl install`
-  downloads Chromium.
+- One prowl process per profile; a second runs in a fresh in-memory profile.
+- Chromium is downloaded on first use; `prowl install` does it ahead of time.
+- `PROWL_ALLOW`, `PROWL_HEADED`, `PROWL_PROFILE_DIR`, `PROWL_DOWNLOADS_DIR`.
