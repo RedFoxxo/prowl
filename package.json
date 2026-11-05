@@ -1,0 +1,57 @@
+{
+  "name": "@redfoxxo/prowl",
+  "version": "0.1.0",
+  "description": "Token-lean browser MCP server: test local apps freely, browse other sites only after the user allows them",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "browser",
+    "playwright",
+    "testing",
+    "ai",
+    "claude"
+  ],
+  "author": "Foxxo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RedFoxxo/prowl.git"
+  },
+  "homepage": "https://github.com/RedFoxxo/prowl#readme",
+  "bugs": {
+    "url": "https://github.com/RedFoxxo/prowl/issues"
+  },
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "prowl": "build/index.js"
+  },
+  "files": [
+    "build/**/*.js",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('build', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "playwright-core": "1.64.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
